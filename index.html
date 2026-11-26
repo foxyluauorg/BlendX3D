@@ -442,90 +442,6 @@ html,body{width:100%;height:100%;min-height:100%;overscroll-behavior:none;backgr
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js">
 
-/* ---- BlendX3D upgrade: image textures + animation controls ---- */
-(()=>{
-  const style=document.createElement("style");
-  style.textContent=`
-  #wcard{max-height:calc(100dvh - 150px);overflow:auto;overscroll-behavior:contain}
-  #wcard .ct{position:sticky;top:0;z-index:2}
-  #wcard .wbtn{min-height:34px}
-  #wcard input,#wcard select{font-size:14px}
-  .bx-texture-preview{width:38px;height:38px;object-fit:cover;border-radius:5px;background:#171717;border:1px solid #555}
-  .bx-action-row{display:flex;gap:6px;margin:7px 8px;flex-wrap:wrap}
-  .bx-action-row button{flex:1;min-width:70px}
-  .bx-help{color:#aaa;padding:5px 9px;line-height:1.4}
-  `;
-  document.head.appendChild(style);
-
-  const mapKeys={ColorMap:"map",NormalMap:"normalMap",RoughnessMap:"roughnessMap",MetalnessMap:"metalnessMap"};
-  const getMat=()=>{const o=selObj;if(!o||!o.isMesh)return null;return Array.isArray(o.material)?o.material[0]:o.material};
-  const texRow=(h,label,key)=>{
-    const m=getMat();const wrap=E("div");wrap.style.cssText="padding:7px 8px;border-bottom:1px solid #444";
-    const top=E("div");top.style.cssText="display:flex;align-items:center;gap:8px";
-    const img=E("img");img.className="bx-texture-preview";
-    const tex=m&&m[mapKeys[key]];if(tex&&tex.image){try{img.src=tex.image.currentSrc||tex.image.src}catch(_){}}
-    const name=E("div");name.style.cssText="flex:1;min-width:0;color:#ddd";name.textContent=label+(tex?" • loaded":" • empty");
-    const input=E("input");input.type="file";input.accept="image/png,image/jpeg,image/webp";input.hidden=true;
-    const load=E("button","wbtn","Import");load.type="button";load.onclick=()=>input.click();
-    input.onchange=()=>{const file=input.files&&input.files[0];if(!file)return;if(file.size>15*1024*1024){toast("Image must be 15 MB or smaller");return}
-      const reader=new FileReader();reader.onload=()=>{const mat=getMat();if(!mat)return;
-        new THREE.TextureLoader().load(reader.result, t=>{t.colorSpace=key==="ColorMap"?THREE.SRGBColorSpace:THREE.NoColorSpace;t.wrapS=t.wrapT=THREE.RepeatWrapping;t.needsUpdate=true;
-          if(mat[mapKeys[key]])mat[mapKeys[key]].dispose();mat[mapKeys[key]]=t;mat.needsUpdate=true;dirty=true;img.src=reader.result;name.textContent=label+" • "+file.name;toast(label+" applied")},undefined,()=>toast("Could not load image"))};reader.readAsDataURL(file)};
-    top.append(img,name,load,input);wrap.appendChild(top);
-    if(tex){const clear=E("button","wbtn","Remove");clear.type="button";clear.style.marginTop="5px";clear.onclick=()=>{const mm=getMat();if(mm&&mm[mapKeys[key]]){mm[mapKeys[key]].dispose();mm[mapKeys[key]]=null;mm.needsUpdate=true;img.removeAttribute("src");name.textContent=label+" • empty";dirty=true;toast(label+" removed")}};wrap.appendChild(clear)}
-    h.appendChild(wrap);
-  };
-  const textureCard=h=>{
-    if(!selObj||!selObj.isMesh){h.appendChild(note("Select a mesh object to edit its textures."));return}
-    h.appendChild(note("Import PNG, JPG or WebP maps from your phone. Color, normal, roughness and metalness maps use standard PBR material channels."));
-    Object.keys(mapKeys).forEach(k=>texRow(h,k,k));
-    const m=getMat();if(!m)return;
-    const numeric=(label,get,set,min,max,step)=>{const i=E("input");i.type="number";i.inputMode="decimal";i.min=min;i.max=max;i.step=step;i.value=get();i.style.cssText="width:75px;background:#333;color:#fff;border:0;padding:6px;border-radius:5px";i.onchange=()=>{let v=Number(i.value);if(!Number.isFinite(v))v=get();v=Math.max(min,Math.min(max,v));set(v);i.value=v;dirty=true};row(h,label,i);return i};
-    numeric("Repeat X",()=>m.map?m.map.repeat.x:1,v=>{[m.map,m.normalMap,m.roughnessMap,m.metalnessMap].forEach(t=>{if(t)t.repeat.x=v})},.01,100,.1);
-    numeric("Repeat Y",()=>m.map?m.map.repeat.y:1,v=>{[m.map,m.normalMap,m.roughnessMap,m.metalnessMap].forEach(t=>{if(t)t.repeat.y=v})},.01,100,.1);
-    numeric("Opacity",()=>m.opacity,v=>{m.opacity=v;m.transparent=v<1;m.needsUpdate=true},0,1,.05);
-    numeric("Metalness",()=>m.metalness,v=>{m.metalness=v},0,1,.05);
-    numeric("Roughness",()=>m.roughness,v=>{m.roughness=v},0,1,.05);
-    const url=E("input");url.type="url";url.placeholder="https://.../texture.png";url.style.cssText="width:100%;box-sizing:border-box;background:#333;color:#fff;border:0;padding:8px;border-radius:5px;margin:6px 0";
-    const apply=btn(h,"Load image URL",()=>{const u=url.value.trim();if(!/^https?:\\/\\//i.test(u))return toast("Enter a valid public image URL");new THREE.TextureLoader().load(u,t=>{t.colorSpace=THREE.SRGBColorSpace;t.wrapS=t.wrapT=THREE.RepeatWrapping;if(m.map)m.map.dispose();m.map=t;m.needsUpdate=true;dirty=true;toast("Texture loaded")},undefined,()=>toast("Image URL blocked or unavailable"))});
-    h.appendChild(url);
-    h.appendChild(note("Roblox asset IDs are not directly downloadable by the editor. Download an image you can access, then import it here."));
-  };
-  const animationCard=h=>{
-    const o=selObj;
-    if(!o){h.appendChild(note("Select an object, then add keyframes to animate it."));}
-    const state={playing:false,raf:0,last:0,rate:1,ease:"Linear"};
-    const controls=E("div");controls.className="bx-action-row";
-    const action=(label,fn)=>{const b=E("button","wbtn",label);b.type="button";b.onclick=fn;controls.appendChild(b);return b};
-    action("▶ Play",()=>{if(state.playing){state.playing=false;cancelAnimationFrame(state.raf);return}state.playing=true;state.last=0;
-      const step=t=>{if(!state.playing)return;if(!state.last)state.last=t;const dt=(t-state.last)/1000;state.last=t;const f=cur()+dt*S.fps*state.rate;if(f>S.end){setF(S.start)}else setF(f);state.raf=requestAnimationFrame(step)};state.raf=requestAnimationFrame(step)});
-    action("Stop",()=>{state.playing=false;cancelAnimationFrame(state.raf);setF(S.start)});
-    action("◀|",()=>setF(S.start));action("|▶",()=>setF(S.end));
-    h.appendChild(controls);
-    num(h,"Playback speed",1,v=>{state.rate=Math.max(.1,Math.min(4,v))});
-    sel(h,"Interpolation",["Linear","Ease In","Ease Out","Ease In-Out","Step"],state.ease,v=>{state.ease=v;window.BX_ANIM_EASING=v});
-    btn(h,"Insert Keyframe (I)",()=>key());
-    btn(h,"Delete Current Keyframe",()=>unkey(false));
-    btn(h,"Clear Selected Object Keys",()=>unkey(true));
-    btn(h,"Add Timeline Marker",()=>{if(!MK.includes(cur()))MK.push(cur());MK.sort((a,b)=>a-b);draw();toast("Marker added")});
-    const exportBtn=btn(h,"Export Animation JSON",()=>{const data={fps:S.fps,start:S.start,end:S.end,objects:ANIM};dl(new Blob([JSON.stringify(data,null,2)],{type:"application/json"}),"blendx3d-animation.json");toast("Animation exported")});
-    h.appendChild(note("Keyframes currently animate object transforms (position, rotation and scale). Bone/skinned-rig animation and Roblox .rbxanim export are not implemented yet."));
-  };
-  const oldWSP=WSP;
-  WSP.Shading=()=>{dockOn();pt("object");showCard("Texture & Materials",textureCard)};
-  WSP.Animation=()=>{dockOn();pt("scene");showCard("Animation Editor",animationCard)};
-  const oldEval=evalAt;
-  evalAt=function(f){
-    const ease=window.BX_ANIM_EASING||"Linear";
-    objs.forEach(o=>{const k=ANIM[o.name];if(!k)return;const fr=Object.keys(k).map(Number).sort((a,b)=>a-b);if(!fr.length)return;
-      let p=fr[0],n=fr[fr.length-1];fr.forEach(x=>{if(x<=f)p=x});for(let i=fr.length-1;i>=0;i--)if(fr[i]>=f)n=fr[i];
-      const a=k[p],b=k[n];let t=n===p?0:(f-p)/(n-p);
-      if(ease==="Ease In")t=t*t;else if(ease==="Ease Out")t=1-(1-t)*(1-t);else if(ease==="Ease In-Out")t=t<.5?2*t*t:1-Math.pow(-2*t+2,2)/2;else if(ease==="Step")t=0;
-      const v=a.map((x,i)=>x+(b[i]-x)*t);o.position.set(v[0],v[1],v[2]);o.rotation.set(v[3],v[4],v[5]);o.scale.set(v[6],v[7],v[8])});
-  };
-  window.BX_TEXTURES={getMaterial:getMat};
-})();
-
 </script>
 <script>
 const $=id=>document.getElementById(id);
@@ -1806,6 +1722,91 @@ T(()=>document.querySelectorAll(".tab").forEach(b=>{const old=b.onclick;b.onclic
   if(was&&was.textContent==="Scripting")$("output").classList.remove("open");
   T(WSP[w])}}));
 })();
+
+/* ---- BlendX3D upgrade: image textures + animation controls ---- */
+(()=>{
+  const style=document.createElement("style");
+  style.textContent=`
+  #wcard{max-height:calc(100dvh - 150px);overflow:auto;overscroll-behavior:contain}
+  #wcard .ct{position:sticky;top:0;z-index:2}
+  #wcard .wbtn{min-height:34px}
+  #wcard input,#wcard select{font-size:14px}
+  .bx-texture-preview{width:38px;height:38px;object-fit:cover;border-radius:5px;background:#171717;border:1px solid #555}
+  .bx-action-row{display:flex;gap:6px;margin:7px 8px;flex-wrap:wrap}
+  .bx-action-row button{flex:1;min-width:70px}
+  .bx-help{color:#aaa;padding:5px 9px;line-height:1.4}
+  `;
+  document.head.appendChild(style);
+
+  const mapKeys={ColorMap:"map",NormalMap:"normalMap",RoughnessMap:"roughnessMap",MetalnessMap:"metalnessMap"};
+  const getMat=()=>{const o=selObj;if(!o||!o.isMesh)return null;return Array.isArray(o.material)?o.material[0]:o.material};
+  const texRow=(h,label,key)=>{
+    const m=getMat();const wrap=E("div");wrap.style.cssText="padding:7px 8px;border-bottom:1px solid #444";
+    const top=E("div");top.style.cssText="display:flex;align-items:center;gap:8px";
+    const img=E("img");img.className="bx-texture-preview";
+    const tex=m&&m[mapKeys[key]];if(tex&&tex.image){try{img.src=tex.image.currentSrc||tex.image.src}catch(_){}}
+    const name=E("div");name.style.cssText="flex:1;min-width:0;color:#ddd";name.textContent=label+(tex?" • loaded":" • empty");
+    const input=E("input");input.type="file";input.accept="image/png,image/jpeg,image/webp";input.hidden=true;
+    const load=E("button","wbtn","Import");load.type="button";load.onclick=()=>input.click();
+    input.onchange=()=>{const file=input.files&&input.files[0];if(!file)return;if(file.size>15*1024*1024){toast("Image must be 15 MB or smaller");return}
+      const reader=new FileReader();reader.onload=()=>{const mat=getMat();if(!mat)return;
+        new THREE.TextureLoader().load(reader.result, t=>{t.colorSpace=key==="ColorMap"?THREE.SRGBColorSpace:THREE.NoColorSpace;t.wrapS=t.wrapT=THREE.RepeatWrapping;t.needsUpdate=true;
+          if(mat[mapKeys[key]])mat[mapKeys[key]].dispose();mat[mapKeys[key]]=t;mat.needsUpdate=true;dirty=true;img.src=reader.result;name.textContent=label+" • "+file.name;toast(label+" applied")},undefined,()=>toast("Could not load image"))};reader.readAsDataURL(file)};
+    top.append(img,name,load,input);wrap.appendChild(top);
+    if(tex){const clear=E("button","wbtn","Remove");clear.type="button";clear.style.marginTop="5px";clear.onclick=()=>{const mm=getMat();if(mm&&mm[mapKeys[key]]){mm[mapKeys[key]].dispose();mm[mapKeys[key]]=null;mm.needsUpdate=true;img.removeAttribute("src");name.textContent=label+" • empty";dirty=true;toast(label+" removed")}};wrap.appendChild(clear)}
+    h.appendChild(wrap);
+  };
+  const textureCard=h=>{
+    if(!selObj||!selObj.isMesh){h.appendChild(note("Select a mesh object to edit its textures."));return}
+    h.appendChild(note("Import PNG, JPG or WebP maps from your phone. Color, normal, roughness and metalness maps use standard PBR material channels."));
+    Object.keys(mapKeys).forEach(k=>texRow(h,k,k));
+    const m=getMat();if(!m)return;
+    const numeric=(label,get,set,min,max,step)=>{const i=E("input");i.type="number";i.inputMode="decimal";i.min=min;i.max=max;i.step=step;i.value=get();i.style.cssText="width:75px;background:#333;color:#fff;border:0;padding:6px;border-radius:5px";i.onchange=()=>{let v=Number(i.value);if(!Number.isFinite(v))v=get();v=Math.max(min,Math.min(max,v));set(v);i.value=v;dirty=true};row(h,label,i);return i};
+    numeric("Repeat X",()=>m.map?m.map.repeat.x:1,v=>{[m.map,m.normalMap,m.roughnessMap,m.metalnessMap].forEach(t=>{if(t)t.repeat.x=v})},.01,100,.1);
+    numeric("Repeat Y",()=>m.map?m.map.repeat.y:1,v=>{[m.map,m.normalMap,m.roughnessMap,m.metalnessMap].forEach(t=>{if(t)t.repeat.y=v})},.01,100,.1);
+    numeric("Opacity",()=>m.opacity,v=>{m.opacity=v;m.transparent=v<1;m.needsUpdate=true},0,1,.05);
+    numeric("Metalness",()=>m.metalness,v=>{m.metalness=v},0,1,.05);
+    numeric("Roughness",()=>m.roughness,v=>{m.roughness=v},0,1,.05);
+    const url=E("input");url.type="url";url.placeholder="https://.../texture.png";url.style.cssText="width:100%;box-sizing:border-box;background:#333;color:#fff;border:0;padding:8px;border-radius:5px;margin:6px 0";
+    const apply=btn(h,"Load image URL",()=>{const u=url.value.trim();if(!/^https?:\\/\\//i.test(u))return toast("Enter a valid public image URL");new THREE.TextureLoader().load(u,t=>{t.colorSpace=THREE.SRGBColorSpace;t.wrapS=t.wrapT=THREE.RepeatWrapping;if(m.map)m.map.dispose();m.map=t;m.needsUpdate=true;dirty=true;toast("Texture loaded")},undefined,()=>toast("Image URL blocked or unavailable"))});
+    h.appendChild(url);
+    h.appendChild(note("Roblox asset IDs are not directly downloadable by the editor. Download an image you can access, then import it here."));
+  };
+  const animationCard=h=>{
+    const o=selObj;
+    if(!o){h.appendChild(note("Select an object, then add keyframes to animate it."));}
+    const state={playing:false,raf:0,last:0,rate:1,ease:"Linear"};
+    const controls=E("div");controls.className="bx-action-row";
+    const action=(label,fn)=>{const b=E("button","wbtn",label);b.type="button";b.onclick=fn;controls.appendChild(b);return b};
+    action("▶ Play",()=>{if(state.playing){state.playing=false;cancelAnimationFrame(state.raf);return}state.playing=true;state.last=0;
+      const step=t=>{if(!state.playing)return;if(!state.last)state.last=t;const dt=(t-state.last)/1000;state.last=t;const f=cur()+dt*S.fps*state.rate;if(f>S.end){setF(S.start)}else setF(f);state.raf=requestAnimationFrame(step)};state.raf=requestAnimationFrame(step)});
+    action("Stop",()=>{state.playing=false;cancelAnimationFrame(state.raf);setF(S.start)});
+    action("◀|",()=>setF(S.start));action("|▶",()=>setF(S.end));
+    h.appendChild(controls);
+    num(h,"Playback speed",1,v=>{state.rate=Math.max(.1,Math.min(4,v))});
+    sel(h,"Interpolation",["Linear","Ease In","Ease Out","Ease In-Out","Step"],state.ease,v=>{state.ease=v;window.BX_ANIM_EASING=v});
+    btn(h,"Insert Keyframe (I)",()=>key());
+    btn(h,"Delete Current Keyframe",()=>unkey(false));
+    btn(h,"Clear Selected Object Keys",()=>unkey(true));
+    btn(h,"Add Timeline Marker",()=>{if(!MK.includes(cur()))MK.push(cur());MK.sort((a,b)=>a-b);draw();toast("Marker added")});
+    const exportBtn=btn(h,"Export Animation JSON",()=>{const data={fps:S.fps,start:S.start,end:S.end,objects:ANIM};dl(new Blob([JSON.stringify(data,null,2)],{type:"application/json"}),"blendx3d-animation.json");toast("Animation exported")});
+    h.appendChild(note("Keyframes currently animate object transforms (position, rotation and scale). Bone/skinned-rig animation and Roblox .rbxanim export are not implemented yet."));
+  };
+  const oldWSP=WSP;
+  WSP.Shading=()=>{dockOn();pt("object");showCard("Texture & Materials",textureCard)};
+  WSP.Animation=()=>{dockOn();pt("scene");showCard("Animation Editor",animationCard)};
+  const oldEval=evalAt;
+  evalAt=function(f){
+    const ease=window.BX_ANIM_EASING||"Linear";
+    objs.forEach(o=>{const k=ANIM[o.name];if(!k)return;const fr=Object.keys(k).map(Number).sort((a,b)=>a-b);if(!fr.length)return;
+      let p=fr[0],n=fr[fr.length-1];fr.forEach(x=>{if(x<=f)p=x});for(let i=fr.length-1;i>=0;i--)if(fr[i]>=f)n=fr[i];
+      const a=k[p],b=k[n];let t=n===p?0:(f-p)/(n-p);
+      if(ease==="Ease In")t=t*t;else if(ease==="Ease Out")t=1-(1-t)*(1-t);else if(ease==="Ease In-Out")t=t<.5?2*t*t:1-Math.pow(-2*t+2,2)/2;else if(ease==="Step")t=0;
+      const v=a.map((x,i)=>x+(b[i]-x)*t);o.position.set(v[0],v[1],v[2]);o.rotation.set(v[3],v[4],v[5]);o.scale.set(v[6],v[7],v[8])});
+  };
+  window.BX_TEXTURES={getMaterial:getMat};
+})();
+
 
 </script>
 </body>
