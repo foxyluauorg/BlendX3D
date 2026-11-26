@@ -1,0 +1,12 @@
+{
+  "appId": "com.blendx3d.app",
+  "appName": "BlendX3D",
+  "webDir": "www",
+  "server": {
+    "androidScheme": "http",
+    "cleartext": true
+  },
+  "android": {
+    "allowMixedContent": true
+  }
+}
