@@ -1490,7 +1490,7 @@ const BXAPI={
  function connect(){ai.url=$("aiurl").value.trim().replace(/\/+$/,"");ai.tok=$("aitok").value.trim();ai.on=true;ai.gen++;save();st("wait","Connecting...");loop(ai.gen)}
  function disconnect(){ai.on=false;ai.gen++;if(ai.ac)ai.ac.abort();save();st("","Disconnected")}
  $("aibtn").onclick=()=>ai.on?disconnect():connect();
- async function detectTermux(){const b=$("aidetect"),msg=$("aidetectmsg");b.disabled=true;msg.textContent="Checking Termux bridge…";try{const r=await fetch("http://127.0.0.1:3333/public-url",{cache:"no-store"});if(!r.ok)throw new Error("not found");const d=await r.json();if(!d.url)throw new Error("no URL yet");ai.url=d.url.replace(/\/+$/,"");$("aiurl").value=ai.url;save();msg.textContent="URL synced automatically: "+ai.url;alog("Termux URL synced");}catch(e){msg.textContent="Not detected. Keep Termux running, then tap again.";}finally{b.disabled=false}}
+ async function detectTermux(){const b=$("aidetect"),msg=$("aidetectmsg");b.disabled=true;msg.textContent="Checking Termux bridge…";try{const r=await fetch("http://127.0.0.1:3333/public-url",{cache:"no-store"});if(!r.ok)throw new Error("not found");const d=await r.json();if(!d.url)throw new Error("no URL yet");ai.url=d.url.replace(/\/+$/,"");ai.tok=d.token||ai.tok;$("aiurl").value=ai.url;$("aitok").value=ai.tok;save();msg.textContent="URL synced automatically: "+ai.url;alog("Termux URL synced");}catch(e){msg.textContent="Not detected. Keep Termux running, then tap again.";}finally{b.disabled=false}}
  $("aidetect").onclick=detectTermux;
  st("","Disconnected");if(sv.auto)connect();}
 try{if(screen.orientation&&screen.orientation.lock)screen.orientation.lock("landscape").catch(()=>{});}catch(e){}
