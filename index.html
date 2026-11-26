@@ -1808,6 +1808,37 @@ T(()=>document.querySelectorAll(".tab").forEach(b=>{const old=b.onclick;b.onclic
 })();
 
 
+
+/* ---- BlendX3D Export Center ---- */
+(()=>{
+  const exportCenter=h=>{
+    h.appendChild(note("Export your scene or selected meshes in common 3D formats. Choose Selection Only in the File menu to export just the active selection."));
+    const formats=[
+      ["OBJ","obj","Wide compatibility with 3D editors and game tools."],
+      ["FBX","fbx","Mesh export for common 3D pipelines."],
+      ["glTF","gltf","JSON-based 3D scene format."],
+      ["GLB","glb","Single-file binary glTF format."],
+      ["STL","stl","Triangle mesh format for 3D printing."],
+      ["PLY","ply","Geometry exchange format."]
+    ];
+    formats.forEach(([label,ext,desc])=>{
+      const line=E("div");line.style.cssText="display:flex;align-items:center;gap:8px;padding:9px;border-bottom:1px solid #444";
+      const info=E("div");info.style.cssText="flex:1;min-width:0";
+      const title=E("b");title.textContent=label+" (."+ext+")";title.style.display="block";
+      const sub=E("small");sub.textContent=desc;sub.style.color="#aaa";
+      info.append(title,sub);
+      const b=E("button","wbtn","Export");b.type="button";b.onclick=()=>ex(ext);
+      line.append(info,b);h.appendChild(line);
+    });
+    const actions=E("div");actions.className="bx-action-row";
+    const project=E("button","wbtn","Save Project (.json)");project.type="button";project.onclick=saveProj;actions.appendChild(project);
+    h.appendChild(actions);
+    h.appendChild(note("OBJ/STL/PLY are geometry exports. glTF/GLB are preferred when you need a modern scene format. FBX support follows BlendX3D's current exporter implementation."));
+  };
+  const oldFile=MENUS.File;
+  MENUS.File=()=>[mi("Export Center…",()=>{dockOn();showCard("Export 3D Files",exportCenter)}),...oldFile()];
+})();
+
 </script>
 </body>
 </html>
