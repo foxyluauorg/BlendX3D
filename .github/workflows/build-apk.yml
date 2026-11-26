@@ -81,15 +81,11 @@ jobs:
           # Force the native Android activity into landscape on every launch.
           python3 - <<'PY'
           from pathlib import Path
-          import re
           p = Path("android/app/src/main/AndroidManifest.xml")
           s = p.read_text()
-          s, n = re.subn(r'(<activity\\b[^>]*?)(\\s+android:screenOrientation="[^"]*")?([^>]*android:name="[^"]*MainActivity[^"]*"[^>]*>)', lambda m: m.group(1) + ' android:screenOrientation="landscape"' + m.group(3), s, count=1, flags=re.S)
-          if n == 0:
-              s = re.sub(r'<activity\\b', '<activity android:screenOrientation="landscape"', s, count=1)
+          s = s.replace("<activity", '<activity android:screenOrientation="landscape"', 1)
           p.write_text(s)
           PY
-
       - name: Build BlendX3D APK
         working-directory: android
         run: |
