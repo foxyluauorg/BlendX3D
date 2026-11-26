@@ -408,6 +408,13 @@ html,body{width:100%;height:100%;min-height:100%;overscroll-behavior:none;backgr
  #dock{bottom:calc(var(--studio-bottom) + 8px)}
 }
 
+/* ===== BLENDX3D BRAND MARK ===== */
+#hdr>.logo{gap:8px;letter-spacing:-.55px}
+#hdr>.logo .bx-mark{display:block;flex:none;filter:drop-shadow(0 1px 3px rgba(245,121,42,.22))}
+#hdr>.logo .bx-wordmark{font-weight:750;letter-spacing:-.65px;white-space:nowrap}
+#hdr>.logo .bx-x{color:#ff8738;font-weight:850}
+@media (orientation:portrait){#hdr>.logo{gap:6px}#hdr>.logo .bx-mark{width:25px;height:25px}#hdr>.logo .bx-wordmark{font-size:14px;letter-spacing:-.7px}}
+
 </style>
 </head>
 <body>
@@ -1352,7 +1359,7 @@ Object.assign(IC,{
 {const h=$("hdr"),mk2=(c,t,f,tt)=>{const d=document.createElement("div");d.className=c;d.innerHTML=t;d.onclick=f;if(tt)d.title=tt;return d};
  const ref=[...h.children].find(c=>c.textContent.trim()==="Render");
  [...$("hdr2").querySelectorAll(".mn")].forEach(m=>h.insertBefore(m,ref));
- h.insertBefore(mk2("logo",'<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#f5792a" stroke-width="2" stroke-linejoin="round"><path d="M12 2 3 7v10l9 5 9-5V7z"/><path d="M3 7l9 5 9-5M12 12v10"/></svg><span>Blend<b>X</b>3D</span>'),h.firstChild);
+ h.insertBefore(mk2("logo",'<svg class="bx-mark" width="29" height="29" viewBox="0 0 32 32" fill="none" aria-hidden="true"><path d="M16 2.8 28 9.4v13.2L16 29.2 4 22.6V9.4L16 2.8Z" fill="#f5792a" fill-opacity=".12" stroke="#ff8738" stroke-width="2.2" stroke-linejoin="round"/><path d="m4.5 9.7 11.5 6.5 11.5-6.5M16 16.2v12.1" stroke="#ff8738" stroke-width="2.1" stroke-linejoin="round"/><path d="m10 6.2 12 6.7v5.2" stroke="#ffb06f" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="bx-wordmark">Blend<span class="bx-x">X</span>3D</span>'),h.firstChild);
  h.appendChild($("bDock"));$("bDock").innerHTML=ic("panel")+"Panels";
  const act=(i,f,t)=>h.appendChild(mk2("act",ic(i),function(e){e.stopPropagation();f.call(this)},t));
  act("save",saveProj,"Save project");act("upload",function(){menuEl._a=this;openMenu(this,MENUS.File())},"Export / File");act("gear",function(){menuEl._a=this;openMenu(this,MENUS.Window())},"Settings");
