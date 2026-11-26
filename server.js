@@ -101,8 +101,8 @@ const server = http.createServer(async (req, res) => {
   if (req.method === "OPTIONS") { res.writeHead(204); return res.end(); }
   const json = (c, o) => { res.writeHead(c, { "content-type": "application/json" }); res.end(JSON.stringify(o)); };
   if (url.pathname === "/" || url.pathname === "/health") return json(200, { name: "blendx3d-mcp", editor_connected: connected(), mcp: "/mcp" });
-  if (url.pathname === "/public-url" && req.method === "GET") return json(200, { url: publicTunnelUrl });
-  if (url.pathname === "/public-url" && req.method === "POST") { let b; try { b = JSON.parse(await readBody(req)); } catch { return json(400, { error: "invalid JSON" }); } if (typeof b.url !== "string" || !/^https:\/\/[a-z0-9.-]+\.trycloudflare\.com$/i.test(b.url)) return json(400, { error: "invalid tunnel URL" }); publicTunnelUrl = b.url; return json(200, { ok: true, url: publicTunnelUrl }); }
+  if (url.pathname === "/public-url" && req.method === "GET") { if (!["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(req.socket.remoteAddress)) return json(403, { error: "local access only" }); return json(200, { url: publicTunnelUrl, token: TOKEN }); }
+  if (url.pathname === "/public-url" && req.method === "POST") { if (!["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(req.socket.remoteAddress)) return json(403, { error: "local access only" }); let b; try { b = JSON.parse(await readBody(req)); } catch { return json(400, { error: "invalid JSON" }); } if (typeof b.url !== "string" || !/^https:\/\/[a-z0-9.-]+\.trycloudflare\.com$/i.test(b.url)) return json(400, { error: "invalid tunnel URL" }); publicTunnelUrl = b.url; return json(200, { ok: true, url: publicTunnelUrl }); }
   if (!authed(req, url)) return json(401, { error: "bad token" });
   if (url.pathname === "/mcp") {
     if (req.method === "POST") {
