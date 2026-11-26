@@ -1,3 +1,4 @@
+
 name: Build BlendX3D APK
 
 on:
@@ -28,8 +29,10 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+      - name: Install Android SDK packages
+        run: |
+          sdkmanager --install "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+          yes | sdkmanager --licenses
 
       - name: Prepare BlendX3D
         run: |
@@ -46,7 +49,7 @@ jobs:
           else
             HTML_FILE="$(find . -maxdepth 1 -type f -name '*.html' | head -n 1)"
             if [ -z "$HTML_FILE" ]; then
-              echo "ERROR: No HTML app file found in the repository root."
+              echo "ERROR: No HTML app file found."
               exit 1
             fi
             cp "$HTML_FILE" www/index.html
@@ -65,13 +68,13 @@ jobs:
           npx cap add android
           npx cap sync android
 
-      - name: Build APK
+      - name: Build BlendX3D APK
         working-directory: android
         run: |
           chmod +x gradlew
           ./gradlew assembleDebug
 
-      - name: Upload APK
+      - name: Upload BlendX3D APK
         uses: actions/upload-artifact@v4
         with:
           name: BlendX3D-APK
