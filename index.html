@@ -415,7 +415,7 @@ html,body{width:100%;height:100%;min-height:100%;overscroll-behavior:none;backgr
 #hdr>.logo .bx-x{color:#ff8738;font-weight:850}
 @media (orientation:portrait){#hdr>.logo{gap:6px}#hdr>.logo .bx-mark{width:25px;height:25px}#hdr>.logo .bx-wordmark{font-size:14px;letter-spacing:-.7px}}
 
-</style>
+#aip .bx-termux{padding:12px;background:#101a2b;border:1px solid #24446c;border-radius:12px;margin:10px 0}#aip .bx-termux>b{color:#76caff;font-size:11px;letter-spacing:.8px}#aip .bx-termux p{margin:7px 0}#aip .bx-termux code{display:block;padding:9px;border-radius:8px;color:#d9f1ff;user-select:text}#aip #aidetect{width:100%;margin-top:9px;padding:10px;border:0;border-radius:9px;background:#176fc0;color:#fff;font-weight:700}#aip #aidetectmsg{display:block;margin-top:7px;color:#9db9d5;font-size:11px}.ld-cube.bx-newmark{width:116px;height:116px;margin-bottom:18px;transform:none;animation:ldin .8s ease both;filter:drop-shadow(0 0 22px rgba(0,155,255,.42))}.ld-cube.bx-newmark svg{width:100%;height:100%;overflow:visible}</style>
 </head>
 <body>
 <canvas id="view"></canvas>
@@ -438,7 +438,7 @@ html,body{width:100%;height:100%;min-height:100%;overscroll-behavior:none;backgr
 
 <input type="file" id="fin" accept=".json" hidden><div id="toast"></div>
 <div id="fab">+</div><div id="qa"></div>
-<div id="loading"><div class="ld-center"><div class="ld-cube"><i></i><i></i><i></i><i></i><i></i><i></i></div><div class="ld-title">Blend<span>X3D</span></div><div class="ld-sub">3D editor</div></div><div class="ld-bottom"><div class="lbar"><i id="fill"></i></div><div class="ld-row"><div id="status">Starting engine…</div><div id="pct">0%</div></div><div id="tip"></div><button id="ldretry" type="button">Retry</button></div></div>
+<div id="loading"><div class="ld-center"><div class="ld-cube bx-newmark" aria-label="BlendX3D logo"><svg viewBox="0 0 100 100" role="img"><defs><linearGradient id="bxg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#a8f8ff"/><stop offset=".48" stop-color="#13c8ff"/><stop offset="1" stop-color="#164bff"/></linearGradient></defs><path d="M50 8 84 27 50 46 16 27Z" fill="url(#bxg)"/><path d="M16 27 50 46 50 58 16 39Z" fill="#0878ed"/><path d="M84 27 50 46 50 58 84 39Z" fill="#123ed4"/><path d="M9 43 50 66 91 43 91 57 50 80 9 57Z" fill="url(#bxg)"/><path d="M9 57 50 80 50 93 9 70Z" fill="#0878ed"/><path d="M91 57 50 80 50 93 91 70Z" fill="#123ed4"/></svg></div><div class="ld-title">Blend<span>X3D</span></div><div class="ld-sub">3D editor</div></div><div class="ld-bottom"><div class="lbar"><i id="fill"></i></div><div class="ld-row"><div id="status">Starting engine…</div><div id="pct">0%</div></div><div id="tip"></div><button id="ldretry" type="button">Retry</button></div></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js">
 
@@ -1460,7 +1460,7 @@ const BXAPI={
  let sv={};try{sv=JSON.parse(localStorage.getItem("bx_ai")||"{}")}catch(e){}
  ai.url=sv.url||ai.url;ai.tok=sv.tok||"";
  const m=document.createElement("div");m.id="aip";
- m.innerHTML='<div class="ah"><span>'+ic("plug")+'AI / MCP Connect</span><u id="aix">'+ic("x")+'</u></div><p>Let Claude, ChatGPT, Cursor or any MCP client build in this editor. Start <code>node server.js</code> from the blendx3d-mcp folder, then connect.</p><label>Server URL</label><input id="aiurl" autocomplete="off" spellcheck="false" inputmode="url"><label>Token (optional)</label><input id="aitok" type="password" autocomplete="off"><div class="ar"><i id="aidot"></i><span id="aist">Disconnected</span></div><button id="aibtn">Connect</button><div id="ailog"></div>';
+ m.innerHTML='<div class="ah"><span>'+ic("plug")+'AI / MCP Connect</span><u id="aix">'+ic("x")+'</u></div><p>Connect an AI client to control your BlendX3D scene. Start the MCP bridge in Termux, then tap Auto-detect to sync its public URL.</p><div class="bx-termux"><b>TERMUX QUICK CONNECT</b><p>In Termux, run:</p><code>bash start-blendx3d-mcp.sh</code><button id="aidetect" type="button">Auto-detect Termux URL</button><small id="aidetectmsg">Waiting for the Termux bridge…</small></div><label>Server URL</label><input id="aiurl" autocomplete="off" spellcheck="false" inputmode="url"><label>Token (optional)</label><input id="aitok" type="password" autocomplete="off"><div class="ar"><i id="aidot"></i><span id="aist">Disconnected</span></div><button id="aibtn">Connect</button><div id="ailog"></div>';
  document.body.appendChild(m);
  const hb=document.createElement("div");hb.className="act";hb.title="AI / MCP";hb.innerHTML=ic("plug")+'<b class="pd"></b>';
  const acts=$("hdr").querySelectorAll(".act");$("hdr").insertBefore(hb,acts[acts.length-1]);
@@ -1490,7 +1490,10 @@ const BXAPI={
  function connect(){ai.url=$("aiurl").value.trim().replace(/\/+$/,"");ai.tok=$("aitok").value.trim();ai.on=true;ai.gen++;save();st("wait","Connecting...");loop(ai.gen)}
  function disconnect(){ai.on=false;ai.gen++;if(ai.ac)ai.ac.abort();save();st("","Disconnected")}
  $("aibtn").onclick=()=>ai.on?disconnect():connect();
+ async function detectTermux(){const b=$("aidetect"),msg=$("aidetectmsg");b.disabled=true;msg.textContent="Checking Termux bridge…";try{const r=await fetch("http://127.0.0.1:3333/public-url",{cache:"no-store"});if(!r.ok)throw new Error("not found");const d=await r.json();if(!d.url)throw new Error("no URL yet");ai.url=d.url.replace(/\\/+$/,"");$("aiurl").value=ai.url;save();msg.textContent="URL synced automatically: "+ai.url;alog("Termux URL synced");}catch(e){msg.textContent="Not detected. Keep Termux running, then tap again.";}finally{b.disabled=false}}
+ $("aidetect").onclick=detectTermux;
  st("","Disconnected");if(sv.auto)connect();}
+try{if(screen.orientation&&screen.orientation.lock)screen.orientation.lock("landscape").catch(()=>{});}catch(e){}
 runLoading();
 
 window.addEventListener("pointerdown",e=>{if(e.button===2&&e.target&&e.target.id==="view"&&window.BX)BX.rmb=true},true);
