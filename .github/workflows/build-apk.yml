@@ -57,10 +57,12 @@ jobs:
           if [ -f ic_launcher.png ]; then cp ic_launcher.png assets/icon-only.png; fi
           if [ -f splash.png ]; then cp splash.png assets/splash.png; fi
 
-          if [ -f index.html ]; then
+          if [ -f Index.html ]; then
+            cp Index.html www/index.html
+          elif [ -f index.html ]; then
             cp index.html www/index.html
           else
-            HTML_FILE="$(find . -maxdepth 1 -type f -name '*.html' | head -n 1)"
+            HTML_FILE="$(find . -maxdepth 1 -type f -iname '*.html' | head -n 1)"
             if [ -z "$HTML_FILE" ]; then
               echo "ERROR: No HTML app file found."
               exit 1
