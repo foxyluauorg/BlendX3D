@@ -2017,6 +2017,29 @@ function aApply(o,a){
     if(a.surface!=null){const sn=String(a.surface);if(sn!=="None"&&!RBX.names.includes(sn))throw new Error("surface must be one of: None, "+RBX.names.join(", "));applyRbx(o,sn)}}
   if(a.visible!=null)o.visible=!!a.visible;
 }
+const BX_ANIMS = new Map();
+let bxAnimTimer = null, bxCurrentAnim = null, bxAnimFrame = 1;
+const bxAnimGet = n => { const a=BX_ANIMS.get(String(n||"")); if(!a) throw new Error('No animation named "'+n+'". Use list_animations.'); return a; };
+const bxAnimVec = (v,fallback,label) => { if(v==null)return fallback.slice(); return v3(v,label); };
+const bxAnimApply = (a,frame) => {
+  for(const tr of a.tracks.values()){
+    let o; try{o=aFind(tr.object_name)}catch(e){continue}
+    const ks=tr.keyframes.slice().sort((x,y)=>x.frame-y.frame); if(!ks.length)continue;
+    let lo=ks[0],hi=ks[ks.length-1];
+    if(frame<=lo.frame)hi=lo;
+    else if(frame>=hi.frame)lo=hi;
+    else {for(let i=0;i<ks.length-1;i++)if(frame>=ks[i].frame&&frame<=ks[i+1].frame){lo=ks[i];hi=ks[i+1];break}}
+    let t=hi.frame===lo.frame?0:(frame-lo.frame)/(hi.frame-lo.frame);
+    const mode=a.interpolation||"linear";
+    if(mode==="step")t=0; else if(mode==="ease-in-out")t=t*t*(3-2*t);
+    const mix=(x,y)=>x.map((v,i)=>v+(y[i]-v)*t);
+    const p=mix(lo.position,hi.position),r=mix(lo.rotation_deg,hi.rotation_deg),sc=mix(lo.scale,hi.scale);
+    o.position.set(p[0],p[2],-p[1]);o.rotation.set(r[0]/D,r[2]/D,r[1]/D);o.scale.set(sc[0],sc[2],sc[1]);
+  }
+  bxAnimFrame=frame;
+  const f=$("frame"); if(f)f.value=Math.round(frame);
+};
+const bxAnimPause = () => { if(bxAnimTimer){clearInterval(bxAnimTimer);bxAnimTimer=null} };
 const BXAPI={
   get_scene:()=>({objects:objs.map(aDesc),selected:selObj?selObj.name:null,coordinate_system:"Z-up, meters, rotation in degrees"}),
   add_object:a=>{if(!PRIMS[a.type])throw new Error("type must be one of: "+Object.keys(PRIMS).join(", "));
@@ -2039,6 +2062,31 @@ const BXAPI={
     return{framed:selObj.name,target:[s.target.x,-s.target.z,s.target.y].map(r3),distance:r2(s.r)}},
   screenshot:a=>{BX.renderer.render(BX.scene,BX.cam);const c=$("view"),w=Math.min(Math.max(200,a.max_width||800),c.width),h=Math.round(c.height*w/c.width),t=document.createElement("canvas");
     t.width=w;t.height=h;t.getContext("2d").drawImage(c,0,0,w,h);return{png_base64:t.toDataURL("image/png").split(",")[1],width:w,height:h}},
+  create_animation:a=>{
+    const name=String(a.name||"").trim();if(!name)throw new Error("name is required");if(BX_ANIMS.has(name))throw new Error("Animation already exists: "+name);
+    const fps=Math.max(1,Math.min(120,Math.round(a.fps||24))),duration=Math.max(.1,Math.min(600,+a.duration_seconds||5));
+    const mode=a.interpolation||"linear";if(!["linear","step","ease-in-out"].includes(mode))throw new Error("interpolation must be linear, step or ease-in-out");
+    const v={name,fps,duration_seconds:duration,end_frame:Math.max(1,Math.round(duration*fps)),loop:!!a.loop,interpolation:mode,tracks:new Map()};
+    BX_ANIMS.set(name,v);return{name,fps,duration_seconds:duration,end_frame:v.end_frame,loop:v.loop,interpolation:mode};
+  },
+  add_animation_track:a=>{const an=bxAnimGet(a.animation),object_name=String(a.object_name||"");aFind(object_name);if(an.tracks.has(object_name))throw new Error("Track already exists for "+object_name);an.tracks.set(object_name,{object_name,keyframes:[]});return{animation:an.name,object_name}},
+  add_keyframe:a=>{const an=bxAnimGet(a.animation),object_name=String(a.object_name||"");const o=aFind(object_name);let tr=an.tracks.get(object_name);if(!tr){tr={object_name,keyframes:[]};an.tracks.set(object_name,tr)}
+    const frame=Math.max(1,Math.min(an.end_frame,Math.round(+a.frame||1))),d=aDesc(o);
+    const k={frame,position:bxAnimVec(a.position,d.position,"position"),rotation_deg:bxAnimVec(a.rotation_deg,d.rotation_deg,"rotation_deg"),scale:bxAnimVec(a.scale,d.scale,"scale")};
+    const i=tr.keyframes.findIndex(x=>x.frame===frame);if(i>=0)tr.keyframes[i]=k;else tr.keyframes.push(k);tr.keyframes.sort((x,y)=>x.frame-y.frame);
+    return{animation:an.name,object_name,keyframe:k};
+  },
+  edit_keyframe:a=>{const an=bxAnimGet(a.animation),tr=an.tracks.get(String(a.object_name||""));if(!tr)throw new Error("Track not found. Use add_animation_track.");const frame=Math.round(+a.frame||1),k=tr.keyframes.find(x=>x.frame===frame);if(!k)throw new Error("Keyframe not found at frame "+frame);if(a.position)k.position=v3(a.position,"position");if(a.rotation_deg)k.rotation_deg=v3(a.rotation_deg,"rotation_deg");if(a.scale)k.scale=v3(a.scale,"scale");return{animation:an.name,object_name:tr.object_name,keyframe:k}},
+  delete_keyframe:a=>{const an=bxAnimGet(a.animation),tr=an.tracks.get(String(a.object_name||""));if(!tr)throw new Error("Track not found");const frame=Math.round(+a.frame||1),i=tr.keyframes.findIndex(x=>x.frame===frame);if(i<0)throw new Error("Keyframe not found");tr.keyframes.splice(i,1);return{deleted:true,animation:an.name,object_name:tr.object_name,frame}},
+  delete_animation_track:a=>{const an=bxAnimGet(a.animation),name=String(a.object_name||"");if(!an.tracks.delete(name))throw new Error("Track not found for "+name);return{deleted:true,animation:an.name,object_name:name}},
+  set_animation_duration:a=>{const an=bxAnimGet(a.animation),d=+a.duration_seconds;if(!Number.isFinite(d)||d<.1||d>600)throw new Error("duration_seconds must be between 0.1 and 600");an.duration_seconds=d;an.end_frame=Math.max(1,Math.round(d*an.fps));for(const tr of an.tracks.values())tr.keyframes=tr.keyframes.filter(k=>k.frame<=an.end_frame);return{animation:an.name,duration_seconds:d,end_frame:an.end_frame}},
+  set_animation_fps:a=>{const an=bxAnimGet(a.animation),fps=Math.round(+a.fps);if(!Number.isFinite(fps)||fps<1||fps>120)throw new Error("fps must be between 1 and 120");an.fps=fps;an.end_frame=Math.max(1,Math.round(an.duration_seconds*fps));for(const tr of an.tracks.values())tr.keyframes=tr.keyframes.filter(k=>k.frame<=an.end_frame);return{animation:an.name,fps,end_frame:an.end_frame}},
+  set_interpolation:a=>{const an=bxAnimGet(a.animation),mode=String(a.interpolation||"");if(!["linear","step","ease-in-out"].includes(mode))throw new Error("interpolation must be linear, step or ease-in-out");an.interpolation=mode;return{animation:an.name,interpolation:mode}},
+  loop_animation:a=>{const an=bxAnimGet(a.animation);an.loop=!!a.enabled;return{animation:an.name,loop:an.loop}},
+  play_animation:a=>{const an=bxAnimGet(a.animation);if(![...an.tracks.values()].some(t=>t.keyframes.length))throw new Error("Add at least one keyframe first");bxAnimPause();bxCurrentAnim=an.name;let f=Math.max(1,Math.min(an.end_frame,Math.round(+a.start_frame||1)));bxAnimApply(an,f);bxAnimTimer=setInterval(()=>{f++;if(f>an.end_frame){if(an.loop)f=1;else{f=an.end_frame;bxAnimApply(an,f);bxAnimPause();return}}bxAnimApply(an,f)},1000/an.fps);return{playing:an.name,start_frame:f,fps:an.fps,loop:an.loop}},
+  pause_animation:()=>{bxAnimPause();return{paused:true,animation:bxCurrentAnim,frame:bxAnimFrame}},
+  stop_animation:()=>{bxAnimPause();if(bxCurrentAnim&&BX_ANIMS.has(bxCurrentAnim)){const an=bxAnimGet(bxCurrentAnim);bxAnimApply(an,1)}return{stopped:true,animation:bxCurrentAnim,frame:1}},
+  list_animations:()=>Array.from(BX_ANIMS.values(),a=>({name:a.name,fps:a.fps,duration_seconds:a.duration_seconds,end_frame:a.end_frame,loop:a.loop,interpolation:a.interpolation,tracks:Array.from(a.tracks.values(),t=>({object_name:t.object_name,keyframes:t.keyframes.length}))})),
   export_model:async a=>{const f=(a.format||"glb").toLowerCase();if(!["fbx","glb","gltf","obj","stl","ply"].includes(f))throw new Error("format must be fbx, glb, gltf, obj, stl or ply");
     const old=expSel;expSel=!!a.selection_only;let r;try{r=ex(f,true)}finally{expSel=old}
     const u=new Uint8Array(await r.b.arrayBuffer()),base=(a.filename?a.filename.replace(/[^\w.-]/g,"_").replace(/\.\w+$/,""):r.name.replace(/\.\w+$/,""));
