@@ -88,7 +88,7 @@ async function handleRpc(m) {
   if (m.id === undefined || m.id === null) return null; // notification
   try {
     switch (m.method) {
-      case "initialize": return ok({ protocolVersion: (m.params && m.params.protocolVersion) || "2025-03-26", capabilities: { tools: {} }, serverInfo: { name: "blendx3d", version: "1.1.0" }, instructions: INSTRUCTIONS });
+      case "initialize": return ok({ protocolVersion: (m.params && m.params.protocolVersion) || "2025-03-26", capabilities: { tools: {} }, serverInfo: { name: "blendx3d", version: "1.2.0" }, instructions: INSTRUCTIONS });
       case "ping": return ok({});
       case "tools/list": return ok({ tools: TOOLS });
       case "tools/call":
