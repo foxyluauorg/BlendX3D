@@ -1554,7 +1554,7 @@ const BXAPI={
  let sv={};try{sv=JSON.parse(localStorage.getItem("bx_ai")||"{}")}catch(e){}
  ai.url=sv.url||ai.url;ai.tok=sv.tok||"";
  const m=document.createElement("div");m.id="aip";
- m.innerHTML='<div class="ah"><span>'+ic("plug")+'AI / MCP Connect</span><u id="aix">'+ic("x")+'</u></div><p>Let Claude, ChatGPT, Cursor or any MCP client build in this editor. Start <code>node server.js</code> from the blendx3d-mcp folder, then connect.</p><label>Server URL</label><input id="aiurl" autocomplete="off" spellcheck="false" inputmode="url"><label>Token (optional)</label><input id="aitok" type="password" autocomplete="off"><div class="ar"><i id="aidot"></i><span id="aist">Disconnected</span></div><button id="aibtn">Connect</button><div id="ailog"></div>';
+ m.innerHTML='<div class="ah"><span>'+ic("plug")+'AI / MCP Connect</span><u id="aix">'+ic("x")+'</u></div><p>Let Claude, ChatGPT, Cursor or any MCP client build in this editor. Start <code>node server.js</code> from the blendx3d-mcp folder, then connect.</p><label>Server URL</label><input id="aiurl" autocomplete="off" spellcheck="false" inputmode="url"><label>Token (optional)</label><input id="aitok" type="password" autocomplete="off"><div class="ar"><i id="aidot"></i><span id="aist">Disconnected</span></div><button id="aidetect" type="button">Auto-detect Termux URL</button><button id="aibtn">Connect</button><div id="ailog"></div>';
  document.body.appendChild(m);
  const hb=document.createElement("div");hb.className="act";hb.title="AI / MCP";hb.innerHTML=ic("plug")+'<b class="pd"></b>';
  const acts=$("hdr").querySelectorAll(".act");$("hdr").insertBefore(hb,acts[acts.length-1]);
@@ -1564,6 +1564,26 @@ const BXAPI={
  const alog=t=>{const d=document.createElement("div");d.textContent=new Date().toLocaleTimeString()+"  "+t;$("ailog").prepend(d);while($("ailog").children.length>30)$("ailog").lastChild.remove()};
  const save=()=>{try{localStorage.setItem("bx_ai",JSON.stringify({url:ai.url,tok:ai.tok,auto:ai.on}))}catch(e){}};
  const hdrs=()=>({"x-token":ai.tok});
+ async function autoDetect(silent=false){
+   const b=$("aidetect");if(b)b.disabled=true;
+   if(!silent){st("wait","Looking for Termux server...");alog("Searching local Termux server on port 3333");}
+   try{
+     let data=null;
+     for(let i=0;i<10;i++){
+       const ac=new AbortController(),timer=setTimeout(()=>ac.abort(),1800);
+       try{
+         const r=await fetch("http://127.0.0.1:3333/public-url",{method:"GET",cache:"no-store",signal:ac.signal});
+         if(r.ok){const v=await r.json();if(typeof v.url==="string"&&/^https:\/\/[a-z0-9.-]+\.trycloudflare\.com$/i.test(v.url)){data=v;break;}}
+       }catch(e){}finally{clearTimeout(timer)}
+       await new Promise(r=>setTimeout(r,700));
+     }
+     if(!data)throw new Error("Termux server or Cloudflare tunnel not found. Start start-blendx3d-mcp.sh in Termux.");
+     ai.url=data.url;ai.tok=typeof data.token==="string"?data.token:"";
+     $("aiurl").value=ai.url;$("aitok").value=ai.tok;save();
+     alog("Detected Termux tunnel: "+ai.url);connect();return true;
+   }catch(e){if(!silent){st("err",e.message);alog(e.message)}return false}
+   finally{if(b)b.disabled=false}
+ }
  async function loop(gen){
    while(ai.on&&ai.gen===gen){
      try{
@@ -1584,7 +1604,8 @@ const BXAPI={
  function connect(){ai.url=$("aiurl").value.trim().replace(/\/+$/,"");ai.tok=$("aitok").value.trim();ai.on=true;ai.gen++;save();st("wait","Connecting...");loop(ai.gen)}
  function disconnect(){ai.on=false;ai.gen++;if(ai.ac)ai.ac.abort();save();st("","Disconnected")}
  $("aibtn").onclick=()=>ai.on?disconnect():connect();
- st("","Disconnected");if(sv.auto)connect();}
+ $("aidetect").onclick=()=>autoDetect(false);
+ st("","Disconnected");autoDetect(true).then(found=>{if(!found&&sv.auto)connect()});}
 runLoading();
 
 window.addEventListener("pointerdown",e=>{if(e.button===2&&e.target&&e.target.id==="view"&&window.BX)BX.rmb=true},true);
