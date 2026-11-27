@@ -922,7 +922,7 @@ body #objxst,body #objxinfo,body #rbst{margin-left:calc(12px*var(--ui));margin-r
 <div id="output"><div class="dh">Output<span><button id="xo"><svg class="ic" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></button></span></div><div id="log"></div></div>
 <div id="bottom" class="bar"><span class="mn">Playback <svg class="ic" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></span><span class="mn">Keying <svg class="ic" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></span><span class="mn">View</span><span class="mn">Marker</span><i class="sep"></i><span class="pb"><svg class="ic" viewBox="0 0 24 24"><path d="M19 20 9 12l10-8z" fill="currentColor"/><path d="M5 19V5"/></svg></span><span class="pb"><svg class="ic" viewBox="0 0 24 24"><path d="M19 4 5 12l14 8z" fill="currentColor"/></svg></span><span class="pb" id="play"><svg class="ic" viewBox="0 0 24 24"><path d="m5 3 14 9-14 9z" fill="currentColor"/></svg></span><span class="pb"><svg class="ic" viewBox="0 0 24 24"><path d="m5 4 10 8-10 8z" fill="currentColor"/><path d="M19 5v14"/></svg></span><input id="frame" value="1" inputmode="numeric"><b>Start 1</b><b>End 250</b><button id="bOut">Output</button></div>
 
-<input type="file" id="fin" accept=".json" hidden><div id="toast"></div>
+<input type="file" id="fin" accept=".json,.bx3d,application/json" hidden><div id="toast"></div>
 <div id="fab">+</div><div id="qa"></div>
 <div id="loading"><div class="ld-center"><div class="ld-cube"><i></i><i></i><i></i><i></i><i></i><i></i></div><div class="ld-title">Blend<span>X3D</span></div><div class="ld-sub">3D editor</div></div><div class="ld-bottom"><div class="lbar"><i id="fill"></i></div><div class="ld-row"><div id="status">Starting engine…</div><div id="pct">0%</div></div><div id="tip"></div><button id="ldretry" type="button">Retry</button></div></div>
 
@@ -1858,7 +1858,10 @@ function toFBX(ms){
   w.raw(Uint8Array.from([0xf8,0x5a,0x8c,0x6a,0xde,0xf5,0xd9,0x7e,0xec,0xe9,0x0c,0xe3,0x75,0x8f,0x29,0x0b]));
   return w.b.slice(0,w.n);
 }
-function dl(blob,name){const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},4000)}
+async function dl(blob,name){const C=window.Capacitor,P=C&&C.Plugins;
+ if(C&&C.isNativePlatform&&C.isNativePlatform()&&P&&P.Filesystem&&P.Share){try{const b64=await new Promise(r=>{const f=new FileReader();f.onload=()=>r(String(f.result).split(",")[1]);f.readAsDataURL(blob)});
+  const w=await P.Filesystem.writeFile({path:name,data:b64,directory:"CACHE"});await P.Share.share({title:name,url:w.uri,dialogTitle:"Save "+name});return}catch(e){if(e&&/cancel/i.test(e.message||""))return}}
+ const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},4000)}
 function ex(f,ret){
   const ms=getMeshes();if(!ms.length){if(ret)throw new Error("Nothing to export (no visible meshes)");return toast("Nothing to export (no visible meshes)")}
   const base=(expSel&&selObj?selObj.name:"blendx3d").replace(/\W+/g,"_");let b;
@@ -1873,7 +1876,7 @@ function ex(f,ret){
     if(ret)return{b,name:base+"."+f};dl(b,base+"."+f);toast("Exported "+base+"."+f+" · "+ms.length+" mesh"+(ms.length>1?"es":"")+" · "+(b.size/1024).toFixed(1)+" KB");
   }catch(e){if(ret)throw e;log("Export failed: "+e.message,"error")}
 }
-function saveProj(){flush();dl(new Blob([snap(1)],{type:"application/json"}),"blendx3d_project.json");toast("Project saved")}
+function saveProj(){return window.BXP?BXP.save():(flush(),dl(new Blob([snap(1)],{type:"application/json"}),"blendx3d_project.json"))}
 $("fin").onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();
   r.onload=()=>{try{const s=JSON.parse(r.result);restore(r.result,s.s);toast("Project loaded")}catch(x){log("Bad project file: "+x.message,"error")}};r.readAsText(f);e.target.value=""};
 /* ---- menus ---- */
@@ -3460,5 +3463,83 @@ html body #joyzone{bottom:0;height:60%}
 #menu .mi-t{padding:calc(5px*var(--ui)) calc(12px*var(--ui));font-size:calc(13px*var(--ui));font-weight:500;color:#d8d8de;pointer-events:none;background:none!important;white-space:nowrap}
 #menu .mi-t:last-child{padding-bottom:calc(9px*var(--ui))}
 </style>
+<script>
+/* ===== BlendX3D · In-app projects (Blender-style Save / Save As / Open / Recover) + Language ===== */
+(function(){
+"use strict";
+const DB="blendx3d",ST="projects",AUTO="__autosave__",INIT=snap(1);
+let cur=null,lastAuto=INIT;
+/* ---------- IndexedDB ---------- */
+const idb=()=>new Promise((ok,no)=>{const r=indexedDB.open(DB,1);r.onupgradeneeded=()=>r.result.createObjectStore(ST,{keyPath:"id"});r.onsuccess=()=>ok(r.result);r.onerror=()=>no(r.error)});
+const tx=async(m,f)=>{const d=await idb();return new Promise((ok,no)=>{const t=d.transaction(ST,m),q=f(t.objectStore(ST));t.oncomplete=()=>ok(q&&q.result);t.onerror=()=>no(t.error)})};
+const put=r=>tx("readwrite",s=>s.put(r)),get=id=>tx("readonly",s=>s.get(id)),all=()=>tx("readonly",s=>s.getAll()),rm=id=>tx("readwrite",s=>s.delete(id));
+const thumb=()=>{try{BX.renderer.render(BX.scene,BX.cam);const c=document.createElement("canvas");c.width=96;c.height=64;c.getContext("2d").drawImage($("view"),0,0,96,64);return c.toDataURL("image/jpeg",.7)}catch(e){return""}};
+const uid=()=>"p"+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+const rec=(id,name)=>({id,name,data:snap(1),thumb:thumb(),updated:Date.now()});
+/* ---------- actions ---------- */
+async function save(){flush();if(!cur)return saveAs();try{await put(rec(cur.id,cur.name));toast("Saved \""+cur.name+"\" in app")}catch(e){log("Save failed: "+e.message,"error")}}
+async function saveAs(){const n=prompt("Project name",cur?cur.name:"Untitled");if(!n||!n.trim())return;flush();const id=uid();try{await put(rec(id,n.trim()));cur={id,name:n.trim()};toast("Saved \""+cur.name+"\" in app")}catch(e){log("Save failed: "+e.message,"error")}}
+async function open(id){const r=await get(id);if(!r)return toast("Project not found");try{restore(r.data,JSON.parse(r.data).s);cur=r.id===AUTO?null:{id:r.id,name:r.name};closePanel();toast("Opened \""+r.name+"\"")}catch(e){log("Bad project: "+e.message,"error")}}
+const recover=()=>open(AUTO);
+function newP(){if(!confirm("Start a new project? Unsaved changes will be lost."))return;restore(INIT,JSON.parse(INIT).s);cur=null;toast("New project")}
+const fname=n=>(n||"project").replace(/[^\w\- ]+/g,"_")+".bx3d.json";
+async function download(id){const r=id?await get(id):rec("tmp",cur?cur.name:"blendx3d_project");if(r)dl(new Blob([r.data],{type:"application/json"}),fname(r.name))}
+async function importFile(f){const txt=await f.text();try{const j=JSON.parse(txt);if(!j.o)throw new Error("not a BlendX3D project");restore(txt,j.s);const n=f.name.replace(/\.(bx3d\.)?json$/i,""),id=uid();await put({id,name:n,data:txt,thumb:thumb(),updated:Date.now()});cur={id,name:n};toast("Imported \""+n+"\"")}catch(e){log("Bad project file: "+e.message,"error")}}
+/* ---------- panel UI ---------- */
+const E=(t,css,txt,fn)=>{const e=document.createElement(t);if(css)e.style.cssText=css;if(txt!=null)e.textContent=txt;if(fn)e.onclick=fn;return e};
+const BTN="background:#3a3a42;color:#eee;border:0;border-radius:5px;padding:6px 10px;margin-left:6px;font:inherit;font-size:12px";
+let pn=null;function closePanel(){if(pn){pn.remove();pn=null}}
+function panel(title,body){closePanel();pn=E("div","position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center");
+ const b=E("div","background:#252529;color:#ddd;border-radius:10px;width:min(460px,94vw);max-height:80vh;display:flex;flex-direction:column;box-shadow:0 10px 40px #000a;font:13px Inter,sans-serif");
+ const h=E("div","display:flex;align-items:center;padding:12px 14px;border-bottom:1px solid #3a3a42;font-weight:600;color:#f5792a");h.append(E("span","flex:1",title),E("span","cursor:pointer;font-size:18px","\u2715",closePanel));
+ body.style.cssText+=";overflow:auto;padding:10px";b.append(h,body);pn.append(b);pn.onclick=e=>{if(e.target===pn)closePanel()};document.body.append(pn)}
+async function manager(){const body=E("div");const ls=(await all()).filter(r=>r.id!==AUTO).sort((a,b)=>b.updated-a.updated);
+ const top=E("div","display:flex;margin-bottom:8px");top.append(E("button",BTN+";margin:0;background:#f5792a;color:#000","Save As\u2026",()=>{closePanel();saveAs()}),E("button",BTN,"Import file",()=>{closePanel();$("fin").click()}));body.append(top);
+ if(!ls.length)body.append(E("div","padding:18px;text-align:center;opacity:.6","No projects saved in the app yet.\nUse File > Save (Ctrl+S)."));
+ ls.forEach(r=>{const row=E("div","display:flex;align-items:center;padding:6px;border-radius:6px;background:"+(cur&&cur.id===r.id?"#3a2e24":"#2d2d32")+";margin-bottom:6px");
+  const im=E("img","width:64px;height:43px;border-radius:4px;background:#111;object-fit:cover");if(r.thumb)im.src=r.thumb;
+  const nm=E("div","flex:1;margin:0 10px;min-width:0;cursor:pointer");nm.append(E("div","font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap",r.name),E("div","opacity:.55;font-size:11px",new Date(r.updated).toLocaleString()));nm.onclick=()=>open(r.id);
+  row.append(im,nm,E("button",BTN,"Open",()=>open(r.id)),E("button",BTN,"\u2B07",()=>download(r.id)),E("button",BTN,"\u270E",async()=>{const n=prompt("Rename",r.name);if(n&&n.trim()){r.name=n.trim();await put(r);if(cur&&cur.id===r.id)cur.name=r.name;manager()}}),E("button",BTN+";color:#ff6b6b","\u2715",async()=>{if(confirm("Delete \""+r.name+"\"?")){await rm(r.id);if(cur&&cur.id===r.id)cur=null;manager()}}));body.append(row)});
+ panel("Projects (saved in app)",body)}
+/* ---------- autosave (Blender: Recover Last Session) ---------- */
+async function auto(){try{flush();const d=snap(1);if(d===lastAuto)return;lastAuto=d;await put({id:AUTO,name:"Last session (autosave)",data:d,thumb:"",updated:Date.now()})}catch(e){}}
+setInterval(auto,15000);document.addEventListener("visibilitychange",()=>{if(document.hidden)auto()});addEventListener("pagehide",auto);
+/* ---------- keys ---------- */
+addEventListener("keydown",e=>{if(!(e.ctrlKey||e.metaKey))return;const k=e.key.toLowerCase();if(k==="s"){e.preventDefault();e.shiftKey?saveAs():save()}else if(k==="o"){e.preventDefault();manager()}},true);
+/* ---------- file input -> library ---------- */
+$("fin").onchange=e=>{const f=e.target.files[0];e.target.value="";if(f)importFile(f)};
+/* ---------- language (Blender: Preferences > Interface > Translation) ---------- */
+const LANGS={en:"English (English)",es:"Spanish (Espa\u00f1ol)",fr:"French (Fran\u00e7ais)",de:"German (Deutsch)",pt:"Portuguese (Portugu\u00eas)",ru:"Russian (\u0420\u0443\u0441\u0441\u043a\u0438\u0439)",ja:"Japanese (\u65e5\u672c\u8a9e)",zh:"Simplified Chinese (\u7b80\u4f53\u4e2d\u6587)"};
+const T={ //            File Edit Render Window Help View Select Add Object Save Open New Export Import Undo Redo Duplicate Delete Layout Modeling Sculpting UV-Editing Texture-Paint Shading Animation Rendering Compositing Scripting Fullscreen Panels Projects Language Mesh Settings
+ es:"Archivo|Editar|Renderizar|Ventana|Ayuda|Vista|Seleccionar|A\u00f1adir|Objeto|Guardar|Abrir|Nuevo|Exportar|Importar|Deshacer|Rehacer|Duplicar|Eliminar|Dise\u00f1o|Modelado|Escultura|Edici\u00f3n UV|Pintura de texturas|Sombreado|Animaci\u00f3n|Renderizado|Composici\u00f3n|Scripting|Pantalla completa|Paneles|Proyectos|Idioma|Malla|Ajustes",
+ fr:"Fichier|\u00c9dition|Rendu|Fen\u00eatre|Aide|Vue|S\u00e9lectionner|Ajouter|Objet|Enregistrer|Ouvrir|Nouveau|Exporter|Importer|Annuler|R\u00e9tablir|Dupliquer|Supprimer|Mise en page|Mod\u00e9lisation|Sculpture|\u00c9dition UV|Peinture de texture|Ombrage|Animation|Rendu|Compositing|Script|Plein \u00e9cran|Panneaux|Projets|Langue|Maillage|Param\u00e8tres",
+ de:"Datei|Bearbeiten|Rendern|Fenster|Hilfe|Ansicht|Ausw\u00e4hlen|Hinzuf\u00fcgen|Objekt|Speichern|\u00d6ffnen|Neu|Exportieren|Importieren|R\u00fcckg\u00e4ngig|Wiederholen|Duplizieren|L\u00f6schen|Layout|Modellierung|Skulptieren|UV-Bearbeitung|Texturmalen|Shading|Animation|Rendering|Compositing|Scripting|Vollbild|Panels|Projekte|Sprache|Mesh|Einstellungen",
+ pt:"Arquivo|Editar|Renderizar|Janela|Ajuda|Visualizar|Selecionar|Adicionar|Objeto|Salvar|Abrir|Novo|Exportar|Importar|Desfazer|Refazer|Duplicar|Excluir|Layout|Modelagem|Escultura|Edi\u00e7\u00e3o UV|Pintura de textura|Sombreamento|Anima\u00e7\u00e3o|Renderiza\u00e7\u00e3o|Composi\u00e7\u00e3o|Scripting|Tela cheia|Pain\u00e9is|Projetos|Idioma|Malha|Configura\u00e7\u00f5es",
+ ru:"\u0424\u0430\u0439\u043b|\u041f\u0440\u0430\u0432\u043a\u0430|\u0420\u0435\u043d\u0434\u0435\u0440|\u041e\u043a\u043d\u043e|\u0421\u043f\u0440\u0430\u0432\u043a\u0430|\u0412\u0438\u0434|\u0412\u044b\u0434\u0435\u043b\u0438\u0442\u044c|\u0414\u043e\u0431\u0430\u0432\u0438\u0442\u044c|\u041e\u0431\u044a\u0435\u043a\u0442|\u0421\u043e\u0445\u0440\u0430\u043d\u0438\u0442\u044c|\u041e\u0442\u043a\u0440\u044b\u0442\u044c|\u041d\u043e\u0432\u044b\u0439|\u042d\u043a\u0441\u043f\u043e\u0440\u0442|\u0418\u043c\u043f\u043e\u0440\u0442|\u041e\u0442\u043c\u0435\u043d\u0438\u0442\u044c|\u041f\u043e\u0432\u0442\u043e\u0440\u0438\u0442\u044c|\u0414\u0443\u0431\u043b\u0438\u0440\u043e\u0432\u0430\u0442\u044c|\u0423\u0434\u0430\u043b\u0438\u0442\u044c|\u041a\u043e\u043c\u043f\u043e\u043d\u043e\u0432\u043a\u0430|\u041c\u043e\u0434\u0435\u043b\u0438\u0440\u043e\u0432\u0430\u043d\u0438\u0435|\u0421\u043a\u0443\u043b\u044c\u043f\u0442\u0438\u043d\u0433|UV-\u0440\u0435\u0434\u0430\u043a\u0442\u043e\u0440|\u0420\u0438\u0441\u043e\u0432\u0430\u043d\u0438\u0435 \u0442\u0435\u043a\u0441\u0442\u0443\u0440|\u0428\u0435\u0439\u0434\u0438\u043d\u0433|\u0410\u043d\u0438\u043c\u0430\u0446\u0438\u044f|\u0420\u0435\u043d\u0434\u0435\u0440\u0438\u043d\u0433|\u041a\u043e\u043c\u043f\u043e\u0437\u0438\u0442\u0438\u043d\u0433|\u0421\u043a\u0440\u0438\u043f\u0442\u044b|\u041d\u0430 \u0432\u0435\u0441\u044c \u044d\u043a\u0440\u0430\u043d|\u041f\u0430\u043d\u0435\u043b\u0438|\u041f\u0440\u043e\u0435\u043a\u0442\u044b|\u042f\u0437\u044b\u043a|\u0421\u0435\u0442\u043a\u0430|\u041d\u0430\u0441\u0442\u0440\u043e\u0439\u043a\u0438",
+ ja:"\u30d5\u30a1\u30a4\u30eb|\u7de8\u96c6|\u30ec\u30f3\u30c0\u30fc|\u30a6\u30a3\u30f3\u30c9\u30a6|\u30d8\u30eb\u30d7|\u30d3\u30e5\u30fc|\u9078\u629e|\u8ffd\u52a0|\u30aa\u30d6\u30b8\u30a7\u30af\u30c8|\u4fdd\u5b58|\u958b\u304f|\u65b0\u898f|\u30a8\u30af\u30b9\u30dd\u30fc\u30c8|\u30a4\u30f3\u30dd\u30fc\u30c8|\u5143\u306b\u623b\u3059|\u3084\u308a\u76f4\u3057|\u8907\u88fd|\u524a\u9664|\u30ec\u30a4\u30a2\u30a6\u30c8|\u30e2\u30c7\u30ea\u30f3\u30b0|\u30b9\u30af\u30eb\u30d7\u30c6\u30a3\u30f3\u30b0|UV\u7de8\u96c6|\u30c6\u30af\u30b9\u30c1\u30e3\u30da\u30a4\u30f3\u30c8|\u30b7\u30a7\u30fc\u30c7\u30a3\u30f3\u30b0|\u30a2\u30cb\u30e1\u30fc\u30b7\u30e7\u30f3|\u30ec\u30f3\u30c0\u30ea\u30f3\u30b0|\u30b3\u30f3\u30dd\u30b8\u30c3\u30c6\u30a3\u30f3\u30b0|\u30b9\u30af\u30ea\u30d7\u30c8|\u30d5\u30eb\u30b9\u30af\u30ea\u30fc\u30f3|\u30d1\u30cd\u30eb|\u30d7\u30ed\u30b8\u30a7\u30af\u30c8|\u8a00\u8a9e|\u30e1\u30c3\u30b7\u30e5|\u8a2d\u5b9a",
+ zh:"\u6587\u4ef6|\u7f16\u8f91|\u6e32\u67d3|\u7a97\u53e3|\u5e2e\u52a9|\u89c6\u56fe|\u9009\u62e9|\u6dfb\u52a0|\u7269\u4f53|\u4fdd\u5b58|\u6253\u5f00|\u65b0\u5efa|\u5bfc\u51fa|\u5bfc\u5165|\u64a4\u9500|\u91cd\u505a|\u590d\u5236|\u5220\u9664|\u5e03\u5c40|\u5efa\u6a21|\u96d5\u523b|UV\u7f16\u8f91|\u7eb9\u7406\u7ed8\u5236|\u7740\u8272|\u52a8\u753b|\u6e32\u67d3|\u5408\u6210|\u811a\u672c|\u5168\u5c4f|\u9762\u677f|\u9879\u76ee|\u8bed\u8a00|\u7f51\u683c|\u8bbe\u7f6e"};
+const KEYS=["File","Edit","Render","Window","Help","View","Select","Add","Object","Save","Open","New","Export","Import","Undo","Redo","Duplicate","Delete","Layout","Modeling","Sculpting","UV Editing","Texture Paint","Shading","Animation","Rendering","Compositing","Scripting","Fullscreen","Panels","Projects","Language","Mesh","Settings"];
+let lang="en";try{lang=localStorage.getItem("bx_lang")||"en"}catch(_){}
+const orig=new WeakMap();let mo=null,busy=false;
+function tr(){if(busy)return;busy=true;mo&&mo.disconnect();
+ let map=null,re=null;if(lang!=="en"&&T[lang]){const v=T[lang].split("|");map={};KEYS.forEach((k,i)=>map[k]=v[i]);re=new RegExp("(?<![\\w])("+KEYS.slice().sort((a,b)=>b.length-a.length).join("|")+")(?![\\w])","g")}
+ const w=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT);let n;
+ while(n=w.nextNode()){const p=n.parentNode;if(!p||/^(SCRIPT|STYLE|TEXTAREA|OPTION)$/.test(p.nodeName)||p.closest&&p.closest("#outl,#output,#toast,[data-nolang]"))continue;
+  const o=orig.has(n)&&orig.get(n).t===n.nodeValue?orig.get(n):{t:n.nodeValue,o:n.nodeValue};
+  if(map){const t=o.o.replace(re,m=>map[m]);if(t!==n.nodeValue)n.nodeValue=t;orig.set(n,{t:n.nodeValue,o:o.o})}else if(orig.has(n)){n.nodeValue=orig.get(n).o;orig.delete(n)}}
+ document.documentElement.lang=lang;busy=false;mo&&mo.observe(document.body,{childList:true,subtree:true,characterData:true})}
+let raf=0;mo=new MutationObserver(()=>{cancelAnimationFrame(raf);raf=requestAnimationFrame(tr)});
+function setLang(l){lang=l;try{localStorage.setItem("bx_lang",l)}catch(_){}tr();toast(LANGS[l])}
+function langPicker(){const b=E("div");Object.keys(LANGS).forEach(k=>b.append(E("div","padding:10px;border-radius:6px;cursor:pointer;margin-bottom:4px;background:"+(k===lang?"#3a2e24":"#2d2d32"),(k===lang?"\u2713 ":"")+LANGS[k],()=>{setLang(k);closePanel()})));b.append(E("div","opacity:.5;font-size:11px;padding:8px","Menu & tab names are translated. Panels not yet covered stay in English."));panel("Language",b)}
+/* ---------- menus ---------- */
+const F=MENUS.File,W=MENUS.Window;
+MENUS.File=()=>[mi("New",newP),mi("Open\u2026  (Ctrl+O)",manager),mi("Save  (Ctrl+S)",save),mi("Save As\u2026  (Ctrl+Shift+S)",saveAs),mi("Recover Last Session",recover),SEP,
+ mi("Download Project (.json)",()=>download()),mi("Import Project File\u2026",()=>$("fin").click()),SEP].concat(F().filter(x=>!(x&&x.l&&/^(Save Project|Open Project)/.test(x.l))));
+MENUS.Window=()=>[mi("Language\u2026",langPicker),mi("Projects\u2026",manager),SEP].concat(W());
+window.BXP={save,saveAs,open,manager,download,setLang,get current(){return cur}};
+tr();mo.observe(document.body,{childList:true,subtree:true,characterData:true});
+})();
+
+</script>
 </body>
 </html>
