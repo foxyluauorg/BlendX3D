@@ -8,6 +8,7 @@ if [ ! -f Index.html ]; then echo "Missing Index.html"; exit 1; fi
 
 mkdir -p www assets
 cp Index.html www/index.html
+cp three.min.js www/three.min.js
 [ ! -f ic_launcher.png ] || cp ic_launcher.png assets/icon-only.png
 [ ! -f splash.png ] || cp splash.png assets/splash.png
 
