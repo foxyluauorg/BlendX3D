@@ -54,6 +54,7 @@ jobs:
           npm install --legacy-peer-deps @capacitor/core@7 @capacitor/cli@7 @capacitor/android@7 @capacitor/assets
 
           mkdir -p www assets
+          cp three.min.js www/three.min.js
           if [ -f ic_launcher.png ]; then cp ic_launcher.png assets/icon-only.png; fi
           if [ -f splash.png ]; then cp splash.png assets/splash.png; fi
 
